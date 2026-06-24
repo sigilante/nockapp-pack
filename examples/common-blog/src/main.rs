@@ -24,11 +24,14 @@
 //! -- no in-process proxy, and no shared :8080 backend, so this app coexists with the other
 //! example apps.
 //!
-//! We also set `EXPIRE_CACHE=0` so the library driver does NOT serve cached GET responses --
-//! otherwise a `GET /` after publishing a new post would return the stale cached index, and
-//! the kernel (which emits the `metric: posts=<N>` slog line) would never be re-poked. With
-//! caching disabled, every request re-pokes the kernel, so `nockd ps` always has a current
-//! POSTS count to grep.
+//! We also set `EXPIRE_CACHE=1` so the library driver only briefly caches GET responses (a
+//! 1-second TTL) -- otherwise a `GET /` long after publishing a new post would return the
+//! stale cached index, and the kernel (which emits the `metric: posts=<N>` slog line) would
+//! not be re-poked. With a 1s TTL, requests effectively re-poke the kernel, so `nockd ps`
+//! always has a current POSTS count to grep; this is safe because publishing is a POST, which
+//! is not cached. We must NOT use `EXPIRE_CACHE=0`: at the current nockchain rev that yields
+//! `tokio::time::interval(Duration::ZERO)`, which panics ("period must be non-zero") and
+//! kills the driver's cache-invalidation worker.
 
 use std::error::Error;
 use std::fs;
@@ -45,10 +48,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Bind the local HTTP driver to our port directly (PR #134's HTTP_PORT override). Set
     // before the driver starts.
     std::env::set_var("HTTP_PORT", HTTP_PORT);
-    // Defeat the library http driver's GET response cache so every request re-pokes the
-    // kernel (fresh index/post after publishing + a `metric: posts=<N>` line per request).
-    // Set before the driver starts.
-    std::env::set_var("EXPIRE_CACHE", "0");
+    // Use a 1-second cache TTL so every request effectively re-pokes the kernel (fresh
+    // index/post after publishing + a `metric: posts=<N>` line per request). Set before the
+    // driver starts. NB: do NOT use "0" -- at the current rev that becomes
+    // tokio::time::interval(Duration::ZERO), which panics ("period must be non-zero"). 1s is
+    // safe; publishing is a POST and is not cached.
+    std::env::set_var("EXPIRE_CACHE", "1");
     // Force local mode (bind 127.0.0.1, no ACME/HTTPS).
     std::env::set_var("HTTPS_DOMAIN", "localhost");
 

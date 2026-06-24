@@ -54,9 +54,12 @@ own port (no shared `:8080` backend), http-counter (8081) and
 [`http-static`](../http-static/) (8083) **run at the same time** — which was impossible at the
 old rev, where the driver hardcoded `127.0.0.1:8080`.
 
-`src/main.rs` also sets `EXPIRE_CACHE=0` so the library driver does **not** serve cached GET
-responses — every request re-pokes the kernel, keeping the displayed count fresh and emitting
-a `metric: count=<N>` line per request.
+`src/main.rs` also sets `EXPIRE_CACHE=1` (a 1-second cache TTL) so the library driver does
+**not** serve long-lived cached GET responses — every request effectively re-pokes the kernel,
+keeping the displayed count fresh and emitting a `metric: count=<N>` line per request. (Do
+**not** use `EXPIRE_CACHE=0`: at the current rev that becomes
+`tokio::time::interval(Duration::ZERO)`, which panics with "period must be non-zero" and kills
+the cache-invalidation worker. Increments are POSTs and are never cached, so a 1s TTL is safe.)
 
 ## Build
 

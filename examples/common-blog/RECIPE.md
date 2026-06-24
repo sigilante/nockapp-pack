@@ -10,7 +10,8 @@ Verified on macOS (darwin, aarch64-apple-darwin) on 2026-06-24, against nockchai
 This builds directly on [`http-static/RECIPE.md`](../http-static/RECIPE.md) and
 [`http-counter/RECIPE.md`](../http-counter/RECIPE.md). Everything they document still applies:
 the toolchain pin (`rust-toolchain.toml` → `nightly-2026-04-03`), the `HTTP_PORT` +
-`EXPIRE_CACHE=0` env vars set in `main.rs` before the driver starts, the harmless
+`EXPIRE_CACHE=1` (a 1-second TTL; `0` panics at the current rev with "period must be
+non-zero") env vars set in `main.rs` before the driver starts, the harmless
 `invalid character '{' in package name` + `unused import: fs` build noise, and the
 `++inner` door having **exactly** `load`/`peek`/`poke` (helpers go in the prelude core).
 Below are only the things that were **NEW** for a CRUD blog — chiefly **Hoon-side URI-path and

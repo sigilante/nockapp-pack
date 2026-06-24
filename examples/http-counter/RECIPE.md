@@ -100,10 +100,15 @@ expiring**. For a counter that is wrong twice over:
 2. A cached GET is served **without poking the kernel**, so the kernel never runs and never
    emits its `metric: count=<N>` slog line — the `nockd` status would go stale.
 
-**Fix:** set `EXPIRE_CACHE=0` (in `src/main.rs`, before the driver starts). With duration 0,
-`is_expired` is always true → the cache is effectively disabled → every request re-pokes the
-kernel → fresh count + a metric line per request. (POST is never cached, but GET is, so this
-matters for the demo and for the COUNT status.)
+**Fix:** set `EXPIRE_CACHE=1` (a 1-second TTL, in `src/main.rs`, before the driver starts).
+With a 1s TTL the cached GET entry expires almost immediately → every request effectively
+re-pokes the kernel → fresh count + a metric line per request. (POST is never cached, but GET
+is, so this matters for the demo and for the COUNT status.)
+
+> ⚠️ Do **not** set `EXPIRE_CACHE=0`. At the current nockchain rev, a 0 duration becomes
+> `tokio::time::interval(Duration::ZERO)`, which panics with "period must be non-zero"
+> (`http.rs:384`/`396`) and kills the driver's cache-invalidation worker — the app keeps
+> serving but spams panics. Use `1` (1-second TTL) instead.
 
 ---
 
@@ -179,7 +184,7 @@ rm -rf .data.http-counter           # start clean
 
 curl -s localhost:8081/ | grep -i count          # Count: 0
 curl -s -X POST localhost:8081/increment         # Count: 1, 2, 3 …
-curl -s localhost:8081/ | grep -i count          # Count: 3  (fresh — EXPIRE_CACHE=0 working)
+curl -s localhost:8081/ | grep -i count          # Count: 3  (fresh — EXPIRE_CACHE=1 working)
 grep -a 'metric: count' <logs>                   # one line per request
 ```
 
@@ -245,7 +250,9 @@ both confirmed.
   are private) → we used an in-process TCP proxy. The driver now reads `HTTP_PORT` and binds it
   directly, so we just `set_var("HTTP_PORT", "8081")` — no proxy, and apps coexist.
 - **B. The local HTTP driver caches GET responses forever** → stale count + no per-request
-  kernel poke (so no metric). Fixed with `EXPIRE_CACHE=0`. (Still applies.)
+  kernel poke (so no metric). Fixed with `EXPIRE_CACHE=1` (a 1-second TTL). Do NOT use `0`: at
+  the current rev that panics (`tokio::time::interval(Duration::ZERO)` → "period must be
+  non-zero"). (Still applies.)
 - **C. Adding an extra arm to the `++inner` door breaks the `(keep)` wrapper nest** — the
   `fort` mold expects exactly load/peek/poke. Put helpers in the prelude core instead.
 
