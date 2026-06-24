@@ -56,6 +56,34 @@ a stale board after a move. (The brief said `0`; that value is unusable at this 
   tableau column flips the next face-down card up; an empty stock + `/draw` flips the waste
   back down into the stock; `won` is simply "all 4 foundations total 52 cards".
 
+## Drag-and-drop: the JS / kernel split (new)
+
+The UI is HTML5 drag-and-drop, but the **kernel stays the authority** — only the in-flight
+drag state lives in the browser.
+
+- **One atomic kernel endpoint:** `POST /move?src=<pile>&i=<index>&dst=<pile>`. It parses
+  both endpoints (`grab-key` for the `tab|found|waste` token, `grab-num` for the pile index
+  and the run index `i=`), then runs the *exact same* move engine the click version used
+  (`run-at` → `legal-run` → `try-move`). On success it returns the re-rendered board; on an
+  illegal/duplicate/empty move it clears the selection and returns the **unchanged** board.
+  `/draw` stays a click; the old `/sel` + `/to` are kept (harmless) but unused by the UI.
+- **Drag attributes in the render:** each movable face-up card is
+  `<div class="card …" draggable="true" data-pile="tabK" data-i="N" data-dst="tabK">` — it is
+  both a drag *source* (pile+index) and the column's drop *target* (so dropping on the
+  exposed card targets the column). Foundations and empty columns are bare
+  `<div class="dropzone" data-dst="foundK|tabK">`.
+- **The only JS in the suite** (`++ app-js`, served cached at `GET /app.js` as
+  `application/javascript`): `dragstart` records `{src,i}` from the element's data attrs;
+  `dragover` `preventDefault()`s on `[data-dst]` (and highlights it); `drop` reads
+  `data-dst` and submits a generated `POST /move` form (full-page replace with the kernel's
+  new board). ~1.2 KB; holds zero game rules.
+- **Headless proof:** since curl can't drag, the atomic endpoint is the testable contract.
+  `POST /move?src=tabA&i=0&dst=tabB` performs a legal tableau move; an illegal `dst` leaves
+  the board byte-identical; `dst=foundK` lands an Ace. All verified by curl before deploy.
+- **Serving JS from a Hoon `'''`-block:** like the CSS, the JS lives in a `'''` literal block
+  so its `{ }`, `( )`, and quotes are taken verbatim (no tape interpolation). Build it as a
+  cord, `(crip app-js)` → `to-octs` in the GET handler.
+
 ## Serving a binary sprite sheet from Hoon (new)
 
 No base64 *decoder* in Hoon and no shipping ~80 KB per render:
@@ -81,6 +109,11 @@ No base64 *decoder* in Hoon and no shipping ~80 KB per render:
    door must be **exactly** `load`/`peek`/`poke`. Move helpers (`try-move`, `remove-src`,
    `post-move`) into the prelude core and pass `g=game` explicitly. (This is the same rule
    minesweeper's RECIPE states; it bites hard here because the move engine is large.)
+4. **Drag-and-drop retrofit:** adding `/move` was trivial (it reuses the whole move engine);
+   the only fiddly part was CSS — once tableau cards became bare draggable `.card` divs
+   (not form-wrapped buttons), the column-stacking overlap rule had to move from
+   `.tabcol .cardform` to `.tabcol>.card` with the last child un-overlapped, and the exposed
+   card carries `data-dst` so no extra drop strip is needed.
 
 ## Gotchas reused (not re-derived here)
 

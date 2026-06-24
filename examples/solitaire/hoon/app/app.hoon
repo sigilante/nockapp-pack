@@ -226,30 +226,29 @@
   |=  extra=tape
   ^-  tape
   "<div class=\"slot {extra}\"></div>"
-::  +sel-form: a face-up card as a /sel source button.
+::  +drag-card: a face-up card that is a drag SOURCE (draggable, carries pile+i)
+::  and ALSO a drop target for its pile (data-dst), so dropping on the exposed
+::  card of a column targets that column.
 ::
-++  sel-form
-  |=  [inner=tape src=tape i=@ud sel-here=?]
+++  drag-card
+  |=  [c=card pile=tape i=@ud]
   ^-  tape
-  =/  cls  ?:(sel-here " selected" "")
+  =/  is  (scow %ud i)
   ;:  weld
-    "<form class=\"cardform{cls}\" method=\"POST\" action=\"/sel?src={src}&i={(scow %ud i)}\">"
-    "<button type=\"submit\" class=\"cardbtn\">"
-    inner
-    "</button></form>"
+    "<div class=\"card {(card-class c)}\" draggable=\"true\""
+    " data-pile=\"{pile}\" data-i=\"{is}\" data-dst=\"{pile}\"></div>"
   ==
-::  +to-form: a drop target as a /to button.
+::  +drop-zone: wrap inner html in a drop target for destination `dst`.
 ::
-++  to-form
+++  drop-zone
   |=  [inner=tape dst=tape]
   ^-  tape
   ;:  weld
-    "<form class=\"cardform\" method=\"POST\" action=\"/to?dst={dst}\">"
-    "<button type=\"submit\" class=\"cardbtn\">"
+    "<div class=\"dropzone\" data-dst=\"{dst}\">"
     inner
-    "</button></form>"
+    "</div>"
   ==
-::  +card-div: a face-up card sprite div.
+::  +card-div: a face-up (non-interactive) card sprite div.
 ::
 ++  card-div
   |=  c=card
@@ -272,35 +271,32 @@
   ^-  tape
   =/  p  (snag k tabs.g)
   =/  src  "tab{(scow %ud k)}"
-  ::  whole column empty: a single /to drop target slot
+  ::  whole column empty: a single empty drop-zone slot (accepts a King)
   ?:  &(?=(~ down.p) ?=(~ up.p))
     ;:  weld
       "<div class=\"tabcol\">"
-      (to-form (empty-slot "tabslot") src)
+      (drop-zone (empty-slot "tabslot") src)
       "</div>"
     ==
-  ::  face-down backs
+  ::  face-down backs (not draggable)
   =/  downs=tape
     %+  roll  down.p
     |=  [c=card acc=tape]
     (weld acc back-div)
-  ::  face-up cards, each a /sel source at its index
+  ::  face-up cards: each is a drag source at its index (and a drop target for
+  ::  the column via data-dst on the exposed card).
   =/  ups=tape
     =/  i  0
     =/  u  up.p
     |-  ^-  tape
     ?~  u  ""
-    =/  here  (is-sel g [%tab k] i)
-    (weld (sel-form (card-div i.u) src i here) $(u t.u, i +(i)))
-  ::  drop strip for moving a run onto this column's exposed top
-  =/  drop=tape
-    ?~  up.p  ""
-    (to-form "<div class=\"droptarget\"></div>" src)
+    (weld (drag-card i.u src i) $(u t.u, i +(i)))
+  ::  The exposed (last) face-up card already carries data-dst={src}, so it is the
+  ::  column's drop target -- no extra strip needed.
   ;:  weld
     "<div class=\"tabcol\">"
     downs
     ups
-    drop
     "</div>"
   ==
 ::  +render: full HTML page.
@@ -316,7 +312,7 @@
     ?~  fs  ""
     =/  top=tape
       ?~(i.fs (empty-slot "foundslot") (card-div (rear i.fs)))
-    (weld (to-form top "found{(scow %ud i)}") $(fs t.fs, i +(i)))
+    (weld (drop-zone top "found{(scow %ud i)}") $(fs t.fs, i +(i)))
   =/  stock-html=tape
     ?~  stock.g
       "<form class=\"cardform\" method=\"POST\" action=\"/draw\"><button type=\"submit\" class=\"cardbtn\"><div class=\"slot recycle\">&#8635;</div></button></form>"
@@ -324,7 +320,7 @@
   =/  waste-html=tape
     ?~  waste.g
       (empty-slot "wasteslot")
-    (sel-form (card-div i.waste.g) "waste" 0 (is-sel g [%waste ~] 0))
+    (drag-card i.waste.g "waste" 0)
   =/  tab-row=tape
     %+  roll  (gulf 0 6)
     |=  [k=@ud acc=tape]
@@ -332,13 +328,13 @@
   =/  banner=tape
     ?:  win  "<div class=\"banner win\">YOU WIN! &#127881;</div>"  ""
   =/  selnote=tape
-    ?~  sel.g  "Click a face-up card to select it, then click a destination pile."
-    "Card selected - click a destination (a pile top, empty column, or foundation)."
+    "Drag a face-up card (or a run) onto a legal pile, or onto a foundation. Click the stock to draw."
   =/  doc=tape
     ;:  weld
       "<!doctype html><html><head><meta charset=\"utf-8\">"
       "<title>NockApp Solitaire</title>"
       "<link rel=\"stylesheet\" href=\"/style.css\">"
+      "<script src=\"/app.js\" defer></script>"
       "</head><body>"
       "<h1>NockApp Klondike Solitaire</h1>"
       "<p class=\"sub\">All game logic in the Hoon kernel. Moves: {(scow %ud moves.g)}</p>"
@@ -389,14 +385,18 @@
   .foundations{display:flex;gap:8px}
   .tableau{display:flex;gap:10px;align-items:flex-start}
   .tabcol{display:flex;flex-direction:column;min-width:71px;min-height:96px}
-  .tabcol .cardform,.tabcol .card,.tabcol .slot{margin-bottom:-72px}
-  .tabcol .cardform:last-of-type{margin-bottom:0}
+  .tabcol>.card,.tabcol>.dropzone{margin-bottom:-72px}
+  .tabcol>.dropzone:last-child{margin-bottom:0}
+  .tabcol>.card:last-child{margin-bottom:0}
   .card{width:71px;height:96px;display:block;background-repeat:no-repeat}
   .card.back{background-position:-284px -384px}
+  .card[draggable="true"]{cursor:grab}
+  .card[draggable="true"]:active{cursor:grabbing}
   .slot{width:71px;height:96px;border:2px dashed rgba(255,255,255,.5);border-radius:6px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:28px;color:rgba(255,255,255,.7)}
-  .cardform{margin:0;padding:0;display:block}
-  .cardbtn{margin:0;padding:0;border:0;background:transparent;cursor:pointer;display:block;line-height:0}
-  .cardform.selected .card{outline:3px solid #ffd54a;outline-offset:-3px;border-radius:6px}
+  .dropzone{display:block}
+  .dropzone.dragover,.card.dragover{outline:3px solid #ffd54a;outline-offset:-3px;border-radius:6px}
+  .stockwaste .cardform{margin:0;padding:0;display:block}
+  .stockwaste .cardbtn{margin:0;padding:0;border:0;background:transparent;cursor:pointer;display:block;line-height:0}
   .droptarget{width:71px;height:24px}
   .banner{padding:10px;margin:8px 0;border-radius:8px;font-weight:bold}
   .banner.win{background:#ffd54a;color:#1d6b3a;font-size:18px}
@@ -405,6 +405,50 @@
   .diamonds-A{background-position:0 -96px}.diamonds-2{background-position:-71px -96px}.diamonds-3{background-position:-142px -96px}.diamonds-4{background-position:-213px -96px}.diamonds-5{background-position:-284px -96px}.diamonds-6{background-position:-355px -96px}.diamonds-7{background-position:-426px -96px}.diamonds-8{background-position:-497px -96px}.diamonds-9{background-position:-568px -96px}.diamonds-10{background-position:-639px -96px}.diamonds-J{background-position:-710px -96px}.diamonds-Q{background-position:-781px -96px}.diamonds-K{background-position:-852px -96px}
   .clubs-A{background-position:0 -192px}.clubs-2{background-position:-71px -192px}.clubs-3{background-position:-142px -192px}.clubs-4{background-position:-213px -192px}.clubs-5{background-position:-284px -192px}.clubs-6{background-position:-355px -192px}.clubs-7{background-position:-426px -192px}.clubs-8{background-position:-497px -192px}.clubs-9{background-position:-568px -192px}.clubs-10{background-position:-639px -192px}.clubs-J{background-position:-710px -192px}.clubs-Q{background-position:-781px -192px}.clubs-K{background-position:-852px -192px}
   .spades-A{background-position:0 -288px}.spades-2{background-position:-71px -288px}.spades-3{background-position:-142px -288px}.spades-4{background-position:-213px -288px}.spades-5{background-position:-284px -288px}.spades-6{background-position:-355px -288px}.spades-7{background-position:-426px -288px}.spades-8{background-position:-497px -288px}.spades-9{background-position:-568px -288px}.spades-10{background-position:-639px -288px}.spades-J{background-position:-710px -288px}.spades-Q{background-position:-781px -288px}.spades-K{background-position:-852px -288px}
+  '''
+::  +app-js: the only JS in the suite. Records the in-flight drag in the browser
+::  ({src,i} on dragstart) and on drop submits POST /move?src&i&dst -- the kernel
+::  validates + applies the move and returns the re-rendered board. A '''-block, so
+::  the JS { } are literal and safe.
+::
+++  app-js
+  ^-  tape
+  %-  trip
+  '''
+  (function(){
+    var drag=null;
+    function post(src,i,dst){
+      var f=document.createElement('form');
+      f.method='POST';
+      f.action='/move?src='+src+'&i='+i+'&dst='+dst;
+      document.body.appendChild(f);
+      f.submit();
+    }
+    document.addEventListener('dragstart',function(e){
+      var c=e.target.closest('[draggable="true"]');
+      if(!c){return;}
+      drag={src:c.getAttribute('data-pile'),i:c.getAttribute('data-i')};
+      if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',drag.src);}
+    });
+    document.addEventListener('dragend',function(){drag=null;clearHi();});
+    function clearHi(){
+      var els=document.querySelectorAll('.dragover');
+      for(var k=0;k<els.length;k++){els[k].classList.remove('dragover');}
+    }
+    document.addEventListener('dragover',function(e){
+      var z=e.target.closest('[data-dst]');
+      if(!z){return;}
+      e.preventDefault();
+      if(e.dataTransfer){e.dataTransfer.dropEffect='move';}
+      clearHi();z.classList.add('dragover');
+    });
+    document.addEventListener('drop',function(e){
+      var z=e.target.closest('[data-dst]');
+      if(!z||!drag){return;}
+      e.preventDefault();
+      post(drag.src,drag.i,z.getAttribute('data-dst'));
+    });
+  })();
   '''
 ::  +sprite-b64: the blackjack sprite sheet, base64-encoded (pure ASCII cord).
 ::  Defined in /lib/sprite for build hygiene; here we re-export the constant.
@@ -512,6 +556,15 @@
                 ==
                 (to-octs (crip stylesheet))
         ==  ==
+      ::  /app.js: the tiny drag-and-drop layer, cached by the browser for a day.
+      ?:  (route-is "/app.js" uri-tape)
+        :_  state(game g)
+        :~  :*  %res  id  %200
+                :~  ['content-type' 'application/javascript']
+                    ['cache-control' 'public, max-age=86400']
+                ==
+                (to-octs (crip app-js))
+        ==  ==
       ::  any other GET: render the board (also surfaces the metric)
       ~>  %slog.[0 leaf+"metric: moves={<moves.g>}"]
       [~[[%res id %200 ['content-type' 'text/html']~ (render g)]] state(game g)]
@@ -528,6 +581,33 @@
             g(stock (flop waste.g), waste ~, sel ~, moves +(moves.g))
           g(waste [i.stock.g waste.g], stock t.stock.g, sel ~, moves +(moves.g))
         (ok b)
+      ::  /move?src=<loc>&i=<idx>&dst=<loc>: ATOMIC drag-and-drop move.
+      ::  Parses both endpoints, validates + applies via try-move, re-renders.
+      ::  The kernel is the sole authority; JS only carried the in-flight drag.
+      ?:  (route-is "/move" uri-tape)
+        =/  src-tape  (grab-key "src=" uri-tape)
+        =/  spidx  (grab-num "src=tab" uri-tape)
+        =/  sfidx  (grab-num "src=found" uri-tape)
+        =/  idx  (grab-num "i=" uri-tape)
+        =/  dst-tape  (grab-key "dst=" uri-tape)
+        =/  dpidx  (grab-num "dst=tab" uri-tape)
+        =/  dfidx  (grab-num "dst=found" uri-tape)
+        =/  src=(unit loc)
+          ?:  =("waste" src-tape)  `[%waste ~]
+          ?:  =("tab" src-tape)    `[%tab spidx]
+          ?:  =("found" src-tape)  `[%found sfidx]
+          ~
+        =/  dst=(unit loc)
+          ?:  =("tab" dst-tape)    `[%tab dpidx]
+          ?:  =("found" dst-tape)  `[%found dfidx]
+          ~
+        ?:  ?|(?=(~ src) ?=(~ dst))  (ok g(sel ~))
+        ?:  =(u.src u.dst)  (ok g(sel ~))
+        =/  run  (run-at g u.src idx)
+        ?:  ?|(?=(~ run) !(legal-run run))  (ok g(sel ~))
+        =/  moved  (try-move g u.src idx run u.dst)
+        ?~  moved  (ok g(sel ~))                     ::  illegal: board unchanged
+        (ok u.moved)
       ::  /sel?src=<loc>&i=<idx>: select a source card/run
       ?:  (route-is "/sel" uri-tape)
         =/  src-tape  (grab-key "src=" uri-tape)
