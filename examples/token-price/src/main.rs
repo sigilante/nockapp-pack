@@ -54,8 +54,8 @@ struct AppState {
     requests: AtomicU64,
 }
 
-/// Resolve the HTTP listen port: `--port <n>` / `--port=<n>` CLI arg, else `TOKEN_PRICE_PORT`
-/// env var, else the default 8086.
+/// Resolve the HTTP listen port: `--port <n>` / `--port=<n>` CLI arg, else `NOCKD_APP_PORT`
+/// (the port nockd injects), else `TOKEN_PRICE_PORT` env var, else the default 8086.
 fn resolve_port() -> u16 {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -71,6 +71,13 @@ fn resolve_port() -> u16 {
                 }
             }
         }
+    }
+    // nockd injects NOCKD_APP_PORT (declared once as `port` in nockd.toml); honor it so the
+    // dashboard's port/relay link and the port we actually bind stay in sync.
+    if let Ok(p) = std::env::var("NOCKD_APP_PORT")
+        .and_then(|s| s.parse().map_err(|_| std::env::VarError::NotPresent))
+    {
+        return p;
     }
     if let Ok(p) = std::env::var("TOKEN_PRICE_PORT")
         .and_then(|s| s.parse().map_err(|_| std::env::VarError::NotPresent))
