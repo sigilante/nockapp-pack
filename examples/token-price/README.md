@@ -15,6 +15,9 @@ GET /                             -> a tiny HTML help page
 - Data is **read-only** from the public DexScreener token API. The app never signs or sends
   anything on-chain.
 
+A background task also polls a **default token** (NOCK on Base) every ~30s and logs its price,
+so the **PRICE** metric in `nockd ps` stays current even when the API is idle.
+
 ## Architecture
 
 This is the [`balance-api`](../balance-api/) shape — a **pure-Rust `axum` HTTP server that
@@ -49,11 +52,14 @@ cd examples/token-price
 nockd deploy -f nockd.toml      # builds via nockup, registers the artifact
 nockd restart token-price       # swaps the live process onto the new artifact
 
-nockd ps                        # token-price  running  verified  ...  REQ <n>
+nockd ps                        # token-price  running  verified  ...  PRICE 0.036
 ```
 
-`nockd.toml` uses `project = "."` (real client-side toolchain build) and passes `--port 8086`.
-The status line scrapes `metric: requests=<N>` into the **REQ** column.
+`nockd.toml` uses `project = "."` (real client-side toolchain build) and declares `port = 8086`
+once: nockd substitutes `{port}` into `args` and exports `NOCKD_APP_PORT`, and the app binds
+that port. The status line scrapes `price_usd=<n>` (from the per-request log line, kept fresh
+by the background poll) into the **PRICE** column. The app also ships an `icon.svg` for the
+nockd dashboard.
 
 ## Query it
 
@@ -76,8 +82,10 @@ curl http://127.0.0.1:8086/
 
 ## Status & shutdown
 
-- Every lookup logs one greppable line `metric: requests=<N>`; nockd surfaces the cumulative
-  count as `REQ <n>` in `nockd ps`.
+- Every successful lookup (and the ~30s background poll of the default token) logs one
+  greppable line `price token=… price_usd=<n> pair=… liquidity_usd=…`; nockd surfaces the
+  latest `price_usd` as `PRICE <n>` in `nockd ps`. The background poll keeps PRICE current
+  even with no traffic.
 - SIGTERM (and Ctrl-C) trigger a graceful `axum` shutdown, so `nockd stop`/`nockd restart`
   are clean. Use those — never `pkill -f token-price` (nockd runs the app from its artifact
   path, not by name).

@@ -83,10 +83,21 @@ let price: f64 = best["priceUsd"].as_str()?.parse()?;     // priceUsd is a STRIN
 ### HTTP shape
 
 `axum` router: `GET /price/:token` and `GET /` (an HTML help page). Shared state is
-`{ reqwest::Client, AtomicU64 requests }`. Each request bumps the counter and prints
-`metric: requests=<N>`. A cheap `0x` + 40-hex check rejects garbage with **400** before an
-HTTP round-trip; a token with no Base pool is **404**; an upstream/transport/parse failure is
-**502**.
+`{ reqwest::Client, AtomicU64 requests }`. A cheap `0x` + 40-hex check rejects garbage with
+**400** before an HTTP round-trip; a token with no Base pool is **404**; an
+upstream/transport/parse failure is **502**.
+
+### The PRICE metric + background poll
+
+The status metric **is the price**, not a request count. Every successful lookup calls a
+shared `emit_price_line(token, info)` that logs
+`price token=… price_usd=<n> pair=… liquidity_usd=…`, and `nockd.toml`'s status-cmd greps
+`price_usd=<n>` into the PRICE column. But nockd only sees the recent log tail, so an
+on-demand-only app would show an empty PRICE while idle. Fix: a `tokio::spawn`ed background
+task (`price_poller`) polls a **default token** (NOCK on Base) every ~30s and emits the same
+line, so PRICE is always current. The poller uses its own clone of the `reqwest::Client`
+(the on-demand state owns the other), and failures are logged + retried, never fatal. tokio's
+`interval` fires its first tick immediately, so PRICE populates within seconds of boot.
 
 ### Boot + shutdown
 
@@ -151,7 +162,9 @@ nockd restart token-price
 
 `token-price` is single-bin (no `bin_target`); artifact is `target/release/token-price` +
 `out.jam`. No `endpoint` in the manifest — DexScreener isn't a Nockchain RPC, so its base URL
-is hardcoded in the binary; `args = ["--port", "8086"]` is the only injected config.
+is hardcoded in the binary. The manifest declares the port **once** (`port = 8086`) and passes
+`args = ["--port", "{port}"]`; nockd substitutes `{port}` and exports `NOCKD_APP_PORT`, and the
+app's `resolve_port` honors both. It also ships `icon = "icon.svg"` for the dashboard.
 
 ---
 
@@ -160,21 +173,20 @@ is hardcoded in the binary; `args = ["--port", "8086"]` is the only injected con
 ```sh
 nockd ps
 # NAME         STATE    HEALTH   VERIFIED  PID    ENDPOINT  STATUS
-# token-price  running  unknown  verified  81512  —         REQ 0
+# token-price  running  unknown  verified  69058  —         PRICE 0.03596
+#   ↑ populated by the background poll within seconds of boot — NO request needed.
 
 curl http://127.0.0.1:8086/price/0x9B5E262cF9bb04869ab40b19AF91D2dc85761722
-# {"liquidity_usd":1220824.69,"pair":"aerodrome/NOCK-USDC","price_usd":0.03611,"token":"0x9B5E2..."}  ← live, under nockd
+# {"liquidity_usd":1218355.25,"pair":"aerodrome/NOCK-USDC","price_usd":0.03596,"token":"0x9B5E2..."}  ← live, under nockd
 curl -w " [%{http_code}]\n" http://127.0.0.1:8086/price/notanaddress
 # {"detail":"expected an EVM address: 0x followed by 40 hex digits",...} [400]
-
-nockd ps   # (after a status tick, having served a few requests)
-# token-price  running  verified  ...  REQ 5
 ```
 
 - **running + verified** ✅ (self-signed attestation, trusted builder key).
-- **live USD price** ✅ — $NOCK on Base ≈ **$0.0361**, from the Aerodrome NOCK/USDC pool
+- **live USD price** ✅ — $NOCK on Base ≈ **$0.036**, from the Aerodrome NOCK/USDC pool
   (~$1.22M liquidity), read live from DexScreener.
-- **REQ metric** ✅ — cumulative request count, populated from the live counter.
+- **PRICE metric** ✅ — the live USD price of the default token, kept fresh by a background
+  poll (every ~30s) so the column is populated even with zero API traffic.
 
 ---
 
@@ -201,3 +213,9 @@ nockd ps   # (after a status tick, having served a few requests)
 5. **The zero address (`0x000…0`) is NOT a good 404 fixture** — DexScreener actually has Base
    pools tagged to it, so it returns 200. Use a random unindexed address (e.g.
    `0x1234…5678`) to demonstrate the 404 path.
+
+6. **A per-request status metric reads empty when the app is idle.** nockd's status-cmd only
+   sees the recent log tail, so if the metric is logged *only* on demand, `nockd ps` shows a
+   blank PRICE between requests. A small background `tokio::spawn` poll (every ~30s) emitting
+   the same metric line keeps the column live. Reuse one `emit_*` helper for both the handler
+   and the poll so the grepped format can't drift, and give the poll its own `Client` clone.

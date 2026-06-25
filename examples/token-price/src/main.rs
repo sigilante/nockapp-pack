@@ -14,9 +14,13 @@
 //! DexScreener HTTP API (https://api.dexscreener.com), whose base URL is hardcoded — there
 //! is no endpoint-by-name and no `--endpoint` arg.
 //!
-//! Status metric (DESIGN status-cmd): we print `metric: requests=<N>` on its own line on
-//! every lookup so the deploy manifest's status command surfaces the cumulative request
-//! count as the REQ column in `nockd ps`.
+//! Status metric (DESIGN status-cmd): every successful lookup logs one line of the form
+//! `price token=… price_usd=… pair=… liquidity_usd=…`, and the deploy manifest scrapes
+//! `price_usd=<n>` into the PRICE column of `nockd ps`. Because nockd's status command only
+//! sees the RECENT log tail, an on-demand-only app would show an empty PRICE when idle — so a
+//! background task polls a default token (NOCK on Base) every ~30s and emits the same line,
+//! keeping PRICE current even with no traffic. The on-demand `GET /price/<addr>` API is
+//! unchanged.
 
 use std::error::Error;
 use std::fs;
@@ -46,6 +50,13 @@ const DEXSCREENER_BASE: &str = "https://api.dexscreener.com/latest/dex/tokens";
 
 /// We only report prices for tokens on Base.
 const CHAIN_ID: &str = "base";
+
+/// Default token for the background price poll that keeps the PRICE status fresh when idle:
+/// the $NOCK token on Base (deepest pool: Aerodrome NOCK/USDC).
+const DEFAULT_TOKEN: &str = "0x9B5E262cF9bb04869ab40b19AF91D2dc85761722";
+
+/// How often the background task refreshes the default-token price line.
+const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Shared HTTP-handler state: a reqwest client and a cumulative request counter (for the
 /// `metric: requests=<N>` status line).
@@ -183,11 +194,35 @@ fn liquidity_usd(pair: &Value) -> f64 {
         .unwrap_or(0.0)
 }
 
-/// Bump the cumulative request counter and emit the greppable status metric line.
+/// Bump the cumulative request counter (kept for log/debug visibility; not the PRICE metric).
 fn record_request(state: &AppState) {
     let n = state.requests.fetch_add(1, Ordering::Relaxed) + 1;
-    // The one clean, greppable metric line nockd's status-cmd scrapes.
     println!("metric: requests={n}");
+}
+
+/// Emit the one greppable price line that nockd's status-cmd scrapes (`price_usd=<n>` ->
+/// PRICE column). Used by BOTH the on-demand handler and the background poll, so the format
+/// stays identical.
+fn emit_price_line(token: &str, info: &PriceInfo) {
+    info!(
+        "price token={token} price_usd={} pair={} liquidity_usd={}",
+        info.price_usd, info.pair, info.liquidity_usd
+    );
+}
+
+/// Background task: poll the default token every `POLL_INTERVAL` and emit its price line, so
+/// the PRICE status in `nockd ps` stays current even when the API is idle. Failures are
+/// logged (warn) and retried next tick — they never crash the server.
+async fn price_poller(http: reqwest::Client) {
+    let mut ticker = tokio::time::interval(POLL_INTERVAL);
+    loop {
+        ticker.tick().await;
+        match lookup_price(&http, DEFAULT_TOKEN).await {
+            Ok(Some(info)) => emit_price_line(DEFAULT_TOKEN, &info),
+            Ok(None) => warn!("background poll: no Base pool for default token {DEFAULT_TOKEN}"),
+            Err(e) => warn!("background poll failed for {DEFAULT_TOKEN}: {e}"),
+        }
+    }
 }
 
 /// `GET /price/<token>`
@@ -212,10 +247,7 @@ async fn price_path(
 
     match lookup_price(&state.http, &token).await {
         Ok(Some(info)) => {
-            info!(
-                "price token={token} price_usd={} pair={} liquidity_usd={}",
-                info.price_usd, info.pair, info.liquidity_usd
-            );
+            emit_price_line(&token, &info);
             (
                 StatusCode::OK,
                 Json(json!({
@@ -315,14 +347,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build()
         .map_err(|e| format!("failed to build HTTP client: {e}"))?;
     let state = Arc::new(AppState {
-        http,
+        http: http.clone(),
         requests: AtomicU64::new(0),
     });
 
     info!("token-price starting; data source={DEXSCREENER_BASE}; http port={port}");
-    // Greppable boot markers so logs always show the resolved config.
+    // Greppable boot marker so logs always show the resolved config.
     println!("metric: source={DEXSCREENER_BASE}");
-    println!("metric: requests=0");
+
+    // Background poll of the default token keeps the PRICE status fresh when idle. It uses its
+    // own clone of the reqwest client; the on-demand API state owns the other clone.
+    tokio::spawn(price_poller(http));
 
     let app = Router::new()
         .route("/", get(root))

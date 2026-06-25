@@ -9,15 +9,20 @@
 app      = "token-price"
 project  = "."
 restart  = "always"
+icon     = "icon.svg"
+
+# Port via nockd: declare it once here. nockd substitutes {port} in args and also exports
+# NOCKD_APP_PORT; our axum server reads --port and binds it (single source of truth).
+port     = 8086
 
 # No endpoint-by-name: the data source is the fixed DexScreener public HTTP API
-# (hardcoded in the binary), not a Nockchain RPC. --port sets the HTTP listen port
-# (default 8086).
-args     = ["--port", "8086"]
+# (hardcoded in the binary), not a Nockchain RPC.
+args     = ["--port", "{port}"]
 
 # Status metric: nockd runs this every few seconds with the ANSI- and NUL-stripped recent
-# log on stdin and cwd = the app's state dir. Our log line `metric: requests=<N>` makes this
-# a one-line grep, surfacing the cumulative lookup count as the REQ column in `nockd ps`.
+# log on stdin and cwd = the app's state dir. Each lookup (and the background poll every 30s)
+# logs `price token=… price_usd=<n> …`, so this grep surfaces the live USD price as the PRICE
+# column in `nockd ps`. The background poll keeps PRICE current even when the API is idle.
 [deploy.status]
-label = "REQ"
-cmd   = "grep -oE 'requests=[0-9]+' | tail -1 | grep -oE '[0-9]+'"
+label = "PRICE"
+cmd   = "grep -aoE 'price_usd=[0-9.]+' | tail -1 | grep -aoE '[0-9.]+'"
