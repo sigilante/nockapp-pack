@@ -1,0 +1,9 @@
+[package]
+name = "gematria"
+version = "0.1.0"
+description = "Compute the English-ordinal gematria of a word or phrase, all logic in the Hoon kernel, served over HTTP."
+authors = ["sigilante"]
+license = "MIT"
+template = "http-server"
+
+[dependencies]

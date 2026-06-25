@@ -1,0 +1,38 @@
+# Declarative deploy manifest for gematria.
+#   nockd deploy -f nockd.toml
+#   nockd restart gematria
+#
+# project = "." builds the artifact client-side via nockup, then ships it (project-mode
+# deploy). The prebuilt fallback also works:
+#
+#   nockd deploy gematria \
+#     --bin ./target/release/gematria \
+#     --jam ./out.jam \
+#     --restart always \
+#     --status-label SUMS \
+#     --status-cmd "grep -aoE 'sums=[0-9]+' | tail -1 | grep -aoE '[0-9]+'"
+#
+# This app has NO Nockchain endpoint, so there is no `endpoint` field.
+[deploy]
+app     = "gematria"
+project = "."
+restart = "always"
+
+# HTTP port, declared once. nockd exports it as NOCKD_APP_PORT (main.rs bridges it to the driver's
+# HTTP_PORT) and the dashboard shows an "Open app ↗" relay link to localhost:<port>.
+port    = 8090
+
+# Dashboard icon: a path (relative to this manifest) to an image, or an inline data: URI. The
+# CLI encodes a path into a data URI at deploy time; the dashboard shows it in the table/tiles.
+icon    = "icon.svg"
+
+# Status metric: nockd runs this every few seconds with the ANSI- and NUL-stripped recent
+# log on stdin and cwd = the app's state dir. The kernel logs `metric: sums=<N>` on EVERY
+# request, so the most recent cumulative computation count surfaces as the SUMS column in
+# `nockd ps`.
+#
+# NOTE the `-a`: the nockapp kernel boot log contains NUL bytes; BSD grep (macOS) treats
+# NUL-bearing stdin as binary and suppresses `-o` output. `grep -a` forces text mode.
+[deploy.status]
+label = "SUMS"
+cmd   = "grep -aoE 'sums=[0-9]+' | tail -1 | grep -aoE '[0-9]+'"
