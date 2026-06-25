@@ -16,10 +16,9 @@ Canonical repo; origin = `github.com/sigilante/nockapp-pack` (branch `master`).
 5. **Verify** — `nockd ps` shows `running` + `verified` + the status metric; then exercise it
    (curl / play). Assert on the `ps` STATUS column, not piped `nockd logs`.
 6. **Document** — `README.md` + `RECIPE.md` (transcript + any new rough edges).
-7. **Commit** here (`master`) and **push** to origin (`nockapp-pack`).
-8. **Mirror** source-only into the nockd gallery, then commit in the nockd repo:
-   `git ls-files examples/<app> | tar -cf - -T - | tar -xf - -C /Users/neal/zorp/nockd/`
-9. **Register in Typhoon** (`../typhoon`) at the release SHA — see below.
+7. **Commit** here (`master`) and **push** to origin (`nockapp-pack`). This repo is the sole
+   home for the examples — the nockd repo gitignores `examples/` (do **not** mirror there).
+8. **Register in Typhoon** (`../typhoon`) at the release SHA — see below.
 
 ## Conventions
 
