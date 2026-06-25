@@ -134,6 +134,19 @@ No base64 *decoder* in Hoon and no shipping ~80 KB per render:
    Hardened the JS too: `dragstart` selects `[data-pile]` (robust, no attribute-value quoting),
    the source is also encoded in the dataTransfer payload as a fallback, and a `dst===src`
    self-drop is ignored client-side.
+7. **Cached assets defeated every redeploy (the real reason "fixes didn't stick"):**
+   `/style.css` and `/app.js` are served `cache-control: public, max-age=86400` (1 day) so the
+   big sprite CSS is fetched once. But that also meant that after a redeploy with a *fixed*
+   `app.js`, the browser kept running the **old cached JS** for a day — so the user kept seeing
+   the same drag bug no matter how many times we fixed and redeployed. The kernel and the
+   *current* `app.js` were correct; the browser just never fetched the new one. Fix:
+   cache-bust with a version token. `++ asset-ver` is a short cord (currently `"4"`); the page
+   HTML (served fresh on every GET, never cached) references `/style.css?v={asset-ver}` and
+   `/app.js?v={asset-ver}`, so a bump changes the URL and forces a refetch immediately. **Bump
+   `asset-ver` whenever app.js or style.css change.** The day-long `cache-control` stays (now
+   safe — the URL changes when the content does). `route-is` is a prefix match
+   (`=(\`0 (find pfx t))`), so `/style.css?v=4` and `/app.js?v=4` still match the route and
+   serve 200; no route change was needed.
 
 ## Gotchas reused (not re-derived here)
 

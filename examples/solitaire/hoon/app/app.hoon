@@ -339,8 +339,8 @@
     ;:  weld
       "<!doctype html><html><head><meta charset=\"utf-8\">"
       "<title>NockApp Solitaire</title>"
-      "<link rel=\"stylesheet\" href=\"/style.css\">"
-      "<script src=\"/app.js\" defer></script>"
+      "<link rel=\"stylesheet\" href=\"/style.css?v={asset-ver}\">"
+      "<script src=\"/app.js?v={asset-ver}\" defer></script>"
       "</head><body>"
       "<h1>NockApp Klondike Solitaire</h1>"
       "<p class=\"sub\">All game logic in the Hoon kernel. Moves: {(scow %ud moves.g)}</p>"
@@ -364,6 +364,12 @@
       "</body></html>"
     ==
   (to-octs (crip doc))
+::  +asset-ver: cache-busting token for /style.css and /app.js. The page HTML is
+::  served fresh on every GET, so changing this here immediately changes the asset
+::  URLs the browser requests, invalidating the day-long browser cache. BUMP THIS
+::  whenever app.js or style.css change, so a redeploy actually reaches the user.
+::
+++  asset-ver  "4"
 ::  +stylesheet: the /style.css body, with the data-URI sprite sheet embedded.
 ::
 ++  stylesheet
