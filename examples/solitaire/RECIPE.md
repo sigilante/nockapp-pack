@@ -114,6 +114,13 @@ No base64 *decoder* in Hoon and no shipping ~80 KB per render:
    (not form-wrapped buttons), the column-stacking overlap rule had to move from
    `.tabcol .cardform` to `.tabcol>.card` with the last child un-overlapped, and the exposed
    card carries `data-dst` so no extra drop strip is needed.
+5. **Drop dead-zone on multi-card columns:** putting `data-dst` only on the offset/overlapping
+   card divs left uncovered gaps over a 2+ pile, so `closest('[data-dst]')` returned null and
+   the `drop` handler silently ignored the drop (1-card columns happened to fill their area, so
+   they worked — masking the bug). Fix: put `data-dst="{src}"` on the whole non-empty
+   `.tabcol` container so a drop *anywhere* over the column resolves to the column (the kernel
+   maps it to the exposed top via `(rear up.p)`). The kernel move logic was already correct
+   for any pile size and was not touched.
 
 ## Gotchas reused (not re-derived here)
 

@@ -291,10 +291,12 @@
     |-  ^-  tape
     ?~  u  ""
     (weld (drag-card i.u src i) $(u t.u, i +(i)))
-  ::  The exposed (last) face-up card already carries data-dst={src}, so it is the
-  ::  column's drop target -- no extra strip needed.
+  ::  The WHOLE column is a drop target (data-dst on .tabcol), so a drop anywhere
+  ::  over the column -- including the offset/overlapping gaps between stacked
+  ::  cards -- resolves via closest('[data-dst]') and targets the exposed top.
+  ::  (The per-card data-dst on the exposed card is kept too; it's harmless.)
   ;:  weld
-    "<div class=\"tabcol\">"
+    "<div class=\"tabcol\" data-dst=\"{src}\">"
     downs
     ups
     "</div>"

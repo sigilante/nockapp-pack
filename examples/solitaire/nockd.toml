@@ -18,6 +18,7 @@ app     = "solitaire"
 project = "."
 restart = "always"
 port    = 8087
+icon    = "icon.svg"
 
 # Status metric: nockd runs this every few seconds with the ANSI- and NUL-stripped recent
 # log on stdin and cwd = the app's state dir. The kernel logs `metric: moves=<N>` on EVERY
