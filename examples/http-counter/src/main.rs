@@ -30,14 +30,11 @@ use nockapp::kernel::boot;
 use nockapp::{http_driver, NockApp};
 use tokio::signal::unix::{signal, SignalKind};
 
-/// Port this app serves on (bound directly by the library driver via HTTP_PORT).
-const HTTP_PORT: &str = "8081";
+/// Public port this app serves on (also the HTTP_PORT the library driver binds in local mode).
+const DEFAULT_PORT: &str = "8081";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Bind the local HTTP driver to our port directly (PR #134's HTTP_PORT override). Set
-    // before the driver starts.
-    std::env::set_var("HTTP_PORT", HTTP_PORT);
     // Use a 1-second cache TTL so every request effectively re-pokes the kernel (fresh count +
     // a metric log line per request). Set before the driver starts. NB: do NOT use "0" -- at
     // the current rev that becomes tokio::time::interval(Duration::ZERO), which panics
@@ -45,13 +42,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
     std::env::set_var("EXPIRE_CACHE", "1");
     // Force local mode (bind 127.0.0.1, no ACME/HTTPS).
     std::env::set_var("HTTPS_DOMAIN", "localhost");
+    // PR #134: the stock http_driver() reads HTTP_PORT for its local-mode bind. No proxy.
+    // nockd is the single source of truth for the port — it exports NOCKD_APP_PORT (declared once
+    // in nockd.toml). Bridge it to HTTP_PORT; fall back to DEFAULT_PORT when run standalone.
+    if std::env::var("HTTP_PORT").is_err() {
+        let port = std::env::var("NOCKD_APP_PORT").unwrap_or_else(|_| DEFAULT_PORT.to_string());
+        std::env::set_var("HTTP_PORT", port);
+    }
 
     // boot::default_boot_cli builds a Cli struct directly; it does NOT parse argv, so nockd's
     // injected args do not collide with the boot CLI.
     let cli = boot::default_boot_cli(false);
     boot::init_default_tracing(&cli);
 
-    tracing::info!("http-counter starting; serving http://127.0.0.1:{HTTP_PORT}");
+    let port = std::env::var("HTTP_PORT").unwrap_or_else(|_| DEFAULT_PORT.to_string());
+    tracing::info!("http-counter starting; serving http://127.0.0.1:{port}");
 
     // The kernel jam is read cwd-relative. Under nockd the cwd is the app's state dir, where
     // nockd places out.jam; running by hand, run from the dir containing out.jam.

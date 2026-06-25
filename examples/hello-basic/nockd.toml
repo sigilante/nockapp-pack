@@ -11,6 +11,10 @@ app     = "hello-basic"
 project = "."
 restart = "always"
 
+# Dashboard icon: a path (relative to this manifest) to an image, or an inline data: URI. The
+# CLI encodes a path into a data URI at deploy time; the dashboard shows it in the table/tiles.
+icon    = "icon.svg"
+
 # No endpoint and no args: hello-basic talks to nothing. It is the minimal NockApp.
 args = []
 

@@ -13,6 +13,10 @@ app      = "nock-price"
 project  = "."
 restart  = "always"
 
+# Dashboard icon: a path (relative to this manifest) to an image, or an inline data: URI. The
+# CLI encodes a path into a data URI at deploy time; the dashboard shows it in the table/tiles.
+icon     = "icon.svg"
+
 # This app talks to external HTTPS price APIs baked into the wrapper (DexScreener, Kraken,
 # CoinGecko) — NOT a Nockchain RPC endpoint — so there is no `endpoint` field and no args.
 

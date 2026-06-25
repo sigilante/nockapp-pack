@@ -12,6 +12,10 @@ app      = "echo-grpc"
 project  = "."
 restart  = "always"
 
+# Dashboard icon: a path (relative to this manifest) to an image, or an inline data: URI. The
+# CLI encodes a path into a data URI at deploy time; the dashboard shows it in the table/tiles.
+icon     = "icon.svg"
+
 # The app's private/admin gRPC address. nockd health-probes it via the tonic health service
 # the private gRPC server exposes. We also pass it to the app so the bind address and the
 # health-probe address agree. Port 5561 is this demo's documented private gRPC port.

@@ -10,12 +10,20 @@ app      = "balance-api"
 project  = "."
 restart  = "always"
 
+# HTTP port, declared once. nockd is the single source of truth: it exports NOCKD_APP_PORT and
+# substitutes {port} in args below. The dashboard shows an "Open app ↗" relay link to localhost:<port>.
+port     = 8082
+
+# Dashboard icon: a path (relative to this manifest) to an image, or an inline data: URI. The
+# CLI encodes a path into a data URI at deploy time; the dashboard shows it in the table/tiles.
+icon     = "icon.svg"
+
 # Endpoint-by-name (DESIGN §5.3): nockd resolves "mainnet-rpc" from its endpoint registry
 # and injects the URL — substituting {endpoint} in args and setting NOCKD_ENDPOINT_URL.
 # Chain access is READ-ONLY (the public wallet_get_balance gRPC). --port sets the HTTP
 # listen port (default 8082).
 endpoint = "mainnet-rpc"
-args     = ["--endpoint", "{endpoint}", "--port", "8082"]
+args     = ["--endpoint", "{endpoint}", "--port", "{port}"]
 
 # Status metric: nockd runs this every few seconds with the ANSI- and NUL-stripped recent
 # log on stdin and cwd = the app's state dir. Our log line `metric: requests=<N>` makes this

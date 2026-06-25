@@ -8,6 +8,10 @@ app      = "chain-watch"
 project  = "."
 restart  = "always"
 
+# Dashboard icon: a path (relative to this manifest) to an image, or an inline data: URI. The
+# CLI encodes a path into a data URI at deploy time; the dashboard shows it in the table/tiles.
+icon     = "icon.svg"
+
 # Endpoint-by-name (DESIGN §5.3): nockd resolves "mainnet-rpc" from its endpoint registry
 # and injects the URL — substituting {endpoint} in args and setting NOCKD_ENDPOINT_URL.
 endpoint = "mainnet-rpc"
