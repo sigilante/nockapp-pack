@@ -121,6 +121,19 @@ No base64 *decoder* in Hoon and no shipping ~80 KB per render:
    `.tabcol` container so a drop *anywhere* over the column resolves to the column (the kernel
    maps it to the exposed top via `(rear up.p)`). The kernel move logic was already correct
    for any pile size and was not touched.
+6. **Waste card was a drop target too → self-drop killed waste→tableau drags:** the waste
+   (drawn) card was rendered by the same `drag-card` helper as tableau cards, so it carried
+   `data-dst="waste"`. A `draggable` element that is *also* a drop target can, in WebKit, have
+   a drop resolve back onto the dragged element itself; `closest('[data-dst]')` then returned
+   the waste card and the move went out as `dst=waste`, which the kernel correctly rejects
+   (you can't drop onto the waste) — so a perfectly legal waste→tableau move (e.g. 10♣ onto
+   J♥) silently did nothing. Diagnosed empirically: a temporary `~> %slog` in `/move` showed
+   the kernel *accepting* every `src=waste&i=0&dst=tabN` curl sent, so the fault was in the
+   render/JS layer, not the kernel. Fix: `drag-card` takes a `target=?` flag; the waste card
+   is rendered with `target=|` (no `data-dst` — it is a drag *source* only, never a target).
+   Hardened the JS too: `dragstart` selects `[data-pile]` (robust, no attribute-value quoting),
+   the source is also encoded in the dataTransfer payload as a fallback, and a `dst===src`
+   self-drop is ignored client-side.
 
 ## Gotchas reused (not re-derived here)
 

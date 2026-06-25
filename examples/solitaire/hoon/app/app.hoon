@@ -226,17 +226,21 @@
   |=  extra=tape
   ^-  tape
   "<div class=\"slot {extra}\"></div>"
-::  +drag-card: a face-up card that is a drag SOURCE (draggable, carries pile+i)
-::  and ALSO a drop target for its pile (data-dst), so dropping on the exposed
-::  card of a column targets that column.
+::  +drag-card: a face-up card that is a drag SOURCE (draggable, carries pile+i).
+::  `target` says whether it is ALSO a drop target for its pile (data-dst).
+::  Tableau cards are (their column carries data-dst anyway, and the exposed card
+::  doubles as a target); the WASTE card is NOT -- you can never drop onto the
+::  waste, and a draggable element that is also a drop target can, in WebKit,
+::  resolve a drop back onto itself (dst="waste"), silently killing the move.
 ::
 ++  drag-card
-  |=  [c=card pile=tape i=@ud]
+  |=  [c=card pile=tape i=@ud target=?]
   ^-  tape
   =/  is  (scow %ud i)
+  =/  dst  ?:(target " data-dst=\"{pile}\"" "")
   ;:  weld
     "<div class=\"card {(card-class c)}\" draggable=\"true\""
-    " data-pile=\"{pile}\" data-i=\"{is}\" data-dst=\"{pile}\"></div>"
+    " data-pile=\"{pile}\" data-i=\"{is}\"{dst}></div>"
   ==
 ::  +drop-zone: wrap inner html in a drop target for destination `dst`.
 ::
@@ -290,7 +294,7 @@
     =/  u  up.p
     |-  ^-  tape
     ?~  u  ""
-    (weld (drag-card i.u src i) $(u t.u, i +(i)))
+    (weld (drag-card i.u src i &) $(u t.u, i +(i)))
   ::  The WHOLE column is a drop target (data-dst on .tabcol), so a drop anywhere
   ::  over the column -- including the offset/overlapping gaps between stacked
   ::  cards -- resolves via closest('[data-dst]') and targets the exposed top.
@@ -322,7 +326,7 @@
   =/  waste-html=tape
     ?~  waste.g
       (empty-slot "wasteslot")
-    (drag-card i.waste.g "waste" 0)
+    (drag-card i.waste.g "waste" 0 |)
   =/  tab-row=tape
     %+  roll  (gulf 0 6)
     |=  [k=@ud acc=tape]
@@ -427,10 +431,15 @@
       f.submit();
     }
     document.addEventListener('dragstart',function(e){
-      var c=e.target.closest('[draggable="true"]');
+      var c=e.target.closest('[data-pile]');
       if(!c){return;}
       drag={src:c.getAttribute('data-pile'),i:c.getAttribute('data-i')};
-      if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',drag.src);}
+      if(e.dataTransfer){
+        e.dataTransfer.effectAllowed='move';
+        // Encode the source in the payload too, so drop never depends on a
+        // module-level var that another handler might have cleared.
+        e.dataTransfer.setData('text/plain',drag.src+'|'+drag.i);
+      }
     });
     document.addEventListener('dragend',function(){drag=null;clearHi();});
     function clearHi(){
@@ -446,9 +455,16 @@
     });
     document.addEventListener('drop',function(e){
       var z=e.target.closest('[data-dst]');
-      if(!z||!drag){return;}
+      if(!z){clearHi();return;}
       e.preventDefault();
-      post(drag.src,drag.i,z.getAttribute('data-dst'));
+      var src=null,i=null;
+      if(drag){src=drag.src;i=drag.i;}
+      else if(e.dataTransfer){var p=(e.dataTransfer.getData('text/plain')||'').split('|');if(p.length===2){src=p[0];i=p[1];}}
+      if(src===null){clearHi();return;}
+      var dst=z.getAttribute('data-dst');
+      // Never submit a no-op self-drop (e.g. releasing on the source pile).
+      if(dst===src){clearHi();return;}
+      post(src,i,dst);
     });
   })();
   '''
